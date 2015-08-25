@@ -6,14 +6,6 @@
 
 package com.google.u2f.gaedemo.servlets;
 
-import java.io.IOException;
-import java.util.List;
-
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import com.google.appengine.api.users.User;
 import com.google.appengine.api.users.UserService;
 import com.google.appengine.api.users.UserServiceFactory;
@@ -23,7 +15,15 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.google.u2f.U2FException;
 import com.google.u2f.server.U2FServer;
+import com.google.u2f.server.messages.RegisteredKey;
 import com.google.u2f.server.messages.SignRequest;
+
+import java.io.IOException;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 @SuppressWarnings("serial")
 @Singleton
@@ -36,31 +36,34 @@ public class BeginSignServlet extends HttpServlet {
     public BeginSignServlet(U2FServer u2fServer) {
         this.u2fServer = u2fServer;
     }
-    
-    public void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException {
-        User user = userService.getCurrentUser();
-        
-        List<SignRequest> signRequests;
-        try {
-          signRequests = u2fServer.getSignRequest(user.getUserId(),
-              (req.isSecure() ? "https://" : "http://") + req.getHeader("Host"));
-        } catch (U2FException e) {
-          throw new ServletException("couldn't get registration request", e);
+
+    @Override
+    public void doPost(HttpServletRequest req, HttpServletResponse resp)
+        throws IOException, ServletException {
+      try {
+      User user = userService.getCurrentUser();
+      String appId = (req.isSecure() ? "https://" : "http://") + req.getHeader("Host");
+      SignRequest signRequest = u2fServer.getSignRequest(user.getUserId(), appId);
+      JsonArray registeredKeysJson = new JsonArray();
+      for(RegisteredKey registeredKey : signRequest.getRegisteredKeys()) {
+        JsonObject registeredKeyJson = new JsonObject();
+        registeredKeyJson.addProperty("version", registeredKey.getVersion());
+        registeredKeyJson.addProperty("keyHandle", registeredKey.getKeyHandle());
+        if(registeredKey.getAppId() != null) {
+          registeredKeyJson.addProperty("appId", registeredKey.getAppId());
         }
-                
-        JsonArray result = new JsonArray();
-        
-        for (SignRequest signRequest : signRequests) {
-          JsonObject signServerData = new JsonObject();
-          signServerData.addProperty("appId", signRequest.getAppId());
-          signServerData.addProperty("challenge", signRequest.getChallenge());
-          signServerData.addProperty("version", signRequest.getVersion());
-          signServerData.addProperty("keyHandle", signRequest.getKeyHandle());
-          signServerData.addProperty("sessionId", signRequest.getSessionId());
-          result.add(signServerData);
-        }
-        
-        resp.setContentType("application/json");
-        resp.getWriter().println(result.toString());
+        //TODO: add transports
+        registeredKeysJson.add(registeredKeyJson);
+      }
+      JsonObject result = new JsonObject();
+      result.addProperty("appId", signRequest.getAppId());
+      result.addProperty("challenge", signRequest.getChallenge());
+      result.add("registeredKeys", registeredKeysJson);
+      result.addProperty("sessionId", signRequest.getSessionId());
+      resp.setContentType("application/json");
+      resp.getWriter().println(result.toString());
+      } catch (U2FException e) {
+        throw new ServletException("couldn't get registration request", e);
+      }
     }
 }

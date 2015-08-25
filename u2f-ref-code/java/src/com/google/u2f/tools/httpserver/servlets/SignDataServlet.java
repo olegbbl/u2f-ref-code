@@ -6,17 +6,17 @@
 
 package com.google.u2f.tools.httpserver.servlets;
 
-import java.io.PrintStream;
-import java.util.List;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.u2f.server.U2FServer;
+import com.google.u2f.server.messages.RegisteredKey;
+import com.google.u2f.server.messages.SignRequest;
 
 import org.simpleframework.http.Request;
 import org.simpleframework.http.Response;
 import org.simpleframework.http.Status;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.u2f.server.U2FServer;
-import com.google.u2f.server.messages.SignRequest;
+import java.io.PrintStream;
 
 public class SignDataServlet extends JavascriptServlet {
 
@@ -34,19 +34,24 @@ public class SignDataServlet extends JavascriptServlet {
       return;
     }
 
-    List<SignRequest> signRequests = u2fServer.getSignRequest(userName, "http://localhost:8080");
-    JsonArray result = new JsonArray();
-    
-    for (SignRequest signRequest : signRequests) {
-      JsonObject signServerData = new JsonObject();
-      signServerData.addProperty("appId", signRequest.getAppId());
-      signServerData.addProperty("challenge", signRequest.getChallenge());
-      signServerData.addProperty("version", signRequest.getVersion());
-      signServerData.addProperty("sessionId", signRequest.getSessionId());
-      signServerData.addProperty("keyHandle", signRequest.getKeyHandle());
-      result.add(signServerData);
+    SignRequest signRequest = u2fServer.getSignRequest(userName, "http://localhost:8080");
+    JsonObject result = new JsonObject();
+    result.addProperty("appId", signRequest.getAppId());
+    result.addProperty("challenge", signRequest.getChallenge());
+    result.addProperty("version", signRequest.getVersion());
+    result.addProperty("sessionId", signRequest.getSessionId());
+    JsonArray registeredKeysJson = new JsonArray();
+    for(RegisteredKey registeredKey : signRequest.getRegisteredKeys()) {
+      JsonObject registeredKeyJson = new JsonObject();
+      registeredKeyJson.addProperty("version", registeredKey.getVersion());
+      registeredKeyJson.addProperty("keyHandle", registeredKey.getKeyHandle());
+      if(registeredKey.getAppId() != null) {
+        registeredKeyJson.addProperty("appId", registeredKey.getAppId());
+      }
+      //TODO: add transports
+      registeredKeysJson.add(registeredKeyJson);
     }
-
+    result.add("registeredKeys", registeredKeysJson);
     body.println("var signData = " + result.toString() + ";");
   }
 }

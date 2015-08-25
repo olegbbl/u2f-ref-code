@@ -6,61 +6,53 @@
 
 package com.google.u2f.server.messages;
 
+import com.google.common.base.Preconditions;
+
+import java.util.Objects;
+
 public class SignResponse {
 
   /** websafe-base64(client data) */
-  private final String bd;
+  private final String clientData;
 
   /** websafe-base64(raw response from U2F device) */
-  private final String sign;
-
-  /** challenge originally passed */
-  private final String challenge;
+  private final String signatureData;
 
   /** session id originally passed */
   private final String sessionId;
+  
+  /**
+   * websafe-base64 encoding of the key handle obtained from the U2F token
+   * during registration.
+   */
+  private final String keyHandle;
 
-  /** application id originally passed */
-  private final String appId;
-
-  public SignResponse(String bd, String sign, String challenge, String sessionId, String appId) {
-    this.bd = bd;
-    this.sign = sign;
-    this.challenge = challenge;
-    this.sessionId = sessionId;
-    this.appId = appId;
+  public SignResponse(String clientData, String signatureData, String sessionId, String keyHandle) {
+    this.clientData = Preconditions.checkNotNull(clientData);
+    this.signatureData = Preconditions.checkNotNull(signatureData);
+    this.sessionId = Preconditions.checkNotNull(sessionId);
+    this.keyHandle = Preconditions.checkNotNull(keyHandle);
   }
 
-  public String getBd() {
-    return bd;
+  public String getClientData() {
+    return clientData;
   }
 
-  public String getSign() {
-    return sign;
-  }
-
-  public String getChallenge() {
-    return challenge;
+  public String getSignatureData() {
+    return signatureData;
   }
 
   public String getSessionId() {
     return sessionId;
   }
 
-  public String getAppId() {
-    return appId;
+  public String getKeyHandle() {
+    return keyHandle;
   }
 
   @Override
   public int hashCode() {
-    final int prime = 31;
-    int result = 1;
-    result = prime * result + ((appId == null) ? 0 : appId.hashCode());
-    result = prime * result + ((bd == null) ? 0 : bd.hashCode());
-    result = prime * result + ((challenge == null) ? 0 : challenge.hashCode());
-    result = prime * result + ((sessionId == null) ? 0 : sessionId.hashCode());
-    result = prime * result + ((sign == null) ? 0 : sign.hashCode());
-    return result;
+    return Objects.hash(clientData, signatureData, sessionId, keyHandle);
   }
 
   @Override
@@ -72,31 +64,9 @@ public class SignResponse {
     if (getClass() != obj.getClass())
       return false;
     SignResponse other = (SignResponse) obj;
-    if (appId == null) {
-      if (other.appId != null)
-        return false;
-    } else if (!appId.equals(other.appId))
-      return false;
-    if (bd == null) {
-      if (other.bd != null)
-        return false;
-    } else if (!bd.equals(other.bd))
-      return false;
-    if (challenge == null) {
-      if (other.challenge != null)
-        return false;
-    } else if (!challenge.equals(other.challenge))
-      return false;
-    if (sessionId == null) {
-      if (other.sessionId != null)
-        return false;
-    } else if (!sessionId.equals(other.sessionId))
-      return false;
-    if (sign == null) {
-      if (other.sign != null)
-        return false;
-    } else if (!sign.equals(other.sign))
-      return false;
-    return true;
+    return Objects.equals(clientData, other.clientData)
+        && Objects.equals(signatureData, other.signatureData)
+        && Objects.equals(sessionId, other.sessionId)
+        && Objects.equals(keyHandle, other.keyHandle);
   }
 }

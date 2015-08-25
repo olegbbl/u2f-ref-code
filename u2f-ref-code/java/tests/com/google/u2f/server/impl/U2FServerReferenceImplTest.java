@@ -14,15 +14,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.MockitoAnnotations.initMocks;
 
-import java.security.cert.X509Certificate;
-import java.util.HashSet;
-import java.util.List;
-
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Matchers;
-import org.mockito.Mock;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.u2f.TestVectors;
@@ -35,10 +26,20 @@ import com.google.u2f.server.U2FServer;
 import com.google.u2f.server.data.EnrollSessionData;
 import com.google.u2f.server.data.SecurityKeyData;
 import com.google.u2f.server.data.SignSessionData;
+import com.google.u2f.server.messages.RegisteredKey;
 import com.google.u2f.server.messages.RegistrationRequest;
 import com.google.u2f.server.messages.RegistrationResponse;
 import com.google.u2f.server.messages.SignRequest;
 import com.google.u2f.server.messages.SignResponse;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Matchers;
+import org.mockito.Mock;
+
+import java.security.cert.X509Certificate;
+import java.util.HashSet;
+import java.util.List;
 
 public class U2FServerReferenceImplTest extends TestVectors {
   @Mock ChallengeGenerator mockChallengeGenerator;
@@ -77,13 +78,17 @@ public class U2FServerReferenceImplTest extends TestVectors {
   
   @Test
   public void testGetRegistrationRequest() throws U2FException {
-    u2fServer = new U2FServerReferenceImpl(mockChallengeGenerator,
-        mockDataStore, cryto, TRUSTED_DOMAINS);
+    u2fServer =
+        new U2FServerReferenceImpl(mockChallengeGenerator, mockDataStore, cryto, TRUSTED_DOMAINS);
 
-    RegistrationRequest registrationRequest = u2fServer.getRegistrationRequest(ACCOUNT_NAME, APP_ID_ENROLL);
+    RegistrationRequest registrationRequest =
+        u2fServer.getRegistrationRequest(ACCOUNT_NAME, APP_ID_ENROLL);
 
-    assertEquals(new RegistrationRequest("U2F_V2", SERVER_CHALLENGE_ENROLL_BASE64, APP_ID_ENROLL,
-        SESSION_ID), registrationRequest);
+    assertEquals(
+        new RegistrationRequest("U2F_V2", SERVER_CHALLENGE_ENROLL_BASE64, APP_ID_ENROLL, SESSION_ID,
+            ImmutableList.<RegisteredKey>of(
+                new RegisteredKey("U2F_V2", KEY_HANDLE_BASE64, APP_ID_ENROLL, null))),
+        registrationRequest);
   }
 
   @Test
@@ -124,41 +129,46 @@ public class U2FServerReferenceImplTest extends TestVectors {
 
   @Test
   public void testGetSignRequest() throws U2FException {
-    u2fServer = new U2FServerReferenceImpl(mockChallengeGenerator,
-        mockDataStore, cryto, TRUSTED_DOMAINS);
+    u2fServer =
+        new U2FServerReferenceImpl(mockChallengeGenerator, mockDataStore, cryto, TRUSTED_DOMAINS);
     when(mockChallengeGenerator.generateChallenge(ACCOUNT_NAME)).thenReturn(SERVER_CHALLENGE_SIGN);
 
-    List<SignRequest> signRequest = u2fServer.getSignRequest(ACCOUNT_NAME, APP_ID_SIGN);
+    SignRequest signRequest = u2fServer.getSignRequest(ACCOUNT_NAME, APP_ID_SIGN);
 
-    assertEquals(new SignRequest("U2F_V2", SERVER_CHALLENGE_SIGN_BASE64, APP_ID_SIGN,
-        KEY_HANDLE_BASE64, SESSION_ID), signRequest.get(0));
+    assertEquals(
+        new SignRequest("U2F_V2", SERVER_CHALLENGE_SIGN_BASE64, APP_ID_SIGN, SESSION_ID,
+            ImmutableList.<RegisteredKey>of(
+                new RegisteredKey("U2F_V2", KEY_HANDLE_BASE64, APP_ID_SIGN, null))),
+        signRequest);
   }
 
   @Test
   public void testProcessSignResponse() throws U2FException {
-	when(mockDataStore.getSignSessionData(SESSION_ID)).thenReturn(
-	    new SignSessionData(ACCOUNT_NAME, APP_ID_SIGN, SERVER_CHALLENGE_SIGN, USER_PUBLIC_KEY_SIGN_HEX));
-    u2fServer = new U2FServerReferenceImpl(mockChallengeGenerator,
-        mockDataStore, cryto, TRUSTED_DOMAINS);
-    SignResponse signResponse = new SignResponse(BROWSER_DATA_SIGN_BASE64,
-        SIGN_RESPONSE_DATA_BASE64, SERVER_CHALLENGE_SIGN_BASE64, SESSION_ID, APP_ID_SIGN);
+    when(mockDataStore.getSignSessionData(SESSION_ID))
+        .thenReturn(new SignSessionData(
+            ACCOUNT_NAME, APP_ID_SIGN, SERVER_CHALLENGE_SIGN, USER_PUBLIC_KEY_SIGN_HEX));
+    u2fServer =
+        new U2FServerReferenceImpl(mockChallengeGenerator, mockDataStore, cryto, TRUSTED_DOMAINS);
+    SignResponse signResponse = new SignResponse(
+        BROWSER_DATA_SIGN_BASE64, SIGN_RESPONSE_DATA_BASE64, SESSION_ID, KEY_HANDLE_BASE64);
 
     u2fServer.processSignResponse(signResponse);
   }
 
   @Test
-  public void testProcessSignResponse_badOrigin() throws U2FException {
-    when(mockDataStore.getSignSessionData(SESSION_ID)).thenReturn(
-        new SignSessionData(ACCOUNT_NAME, APP_ID_SIGN, SERVER_CHALLENGE_SIGN, USER_PUBLIC_KEY_SIGN_HEX));
-    u2fServer = new U2FServerReferenceImpl(mockChallengeGenerator,
-        mockDataStore, cryto, ImmutableSet.of("some-other-domain.com"));
-    SignResponse signResponse = new SignResponse(BROWSER_DATA_SIGN_BASE64,
-        SIGN_RESPONSE_DATA_BASE64, SERVER_CHALLENGE_SIGN_BASE64, SESSION_ID, APP_ID_SIGN);
+  public void testProcessSignResponse_badOrigin() {
+    when(mockDataStore.getSignSessionData(SESSION_ID))
+        .thenReturn(new SignSessionData(
+            ACCOUNT_NAME, APP_ID_SIGN, SERVER_CHALLENGE_SIGN, USER_PUBLIC_KEY_SIGN_HEX));
+    u2fServer = new U2FServerReferenceImpl(
+        mockChallengeGenerator, mockDataStore, cryto, ImmutableSet.of("some-other-domain.com"));
+    SignResponse signResponse = new SignResponse(
+        BROWSER_DATA_SIGN_BASE64, SIGN_RESPONSE_DATA_BASE64, SESSION_ID, KEY_HANDLE_BASE64);
 
     try {
       u2fServer.processSignResponse(signResponse);
       fail("expected exception, but didn't get it");
-    } catch(U2FException e) {
+    } catch (U2FException e) {
       assertTrue(e.getMessage().contains("is not a recognized home origin"));
     }
   }
@@ -167,14 +177,16 @@ public class U2FServerReferenceImplTest extends TestVectors {
   // TODO: put test back in once we have signature sample on a correct browserdata json
   // (currently, this test uses an enrollment browserdata during a signature)
   public void testProcessSignResponse2() throws U2FException {
-	when(mockDataStore.getSignSessionData(SESSION_ID)).thenReturn(
-	    new SignSessionData(ACCOUNT_NAME, APP_ID_2, SERVER_CHALLENGE_SIGN, USER_PUBLIC_KEY_2));
-    when(mockDataStore.getSecurityKeyData(ACCOUNT_NAME)).thenReturn(
-        ImmutableList.of(new SecurityKeyData(0l, KEY_HANDLE_2, USER_PUBLIC_KEY_2, VENDOR_CERTIFICATE, 0)));
-    u2fServer = new U2FServerReferenceImpl(mockChallengeGenerator,
-        mockDataStore, cryto, TRUSTED_DOMAINS);
-    SignResponse signResponse = new SignResponse(BROWSER_DATA_2_BASE64, SIGN_DATA_2_BASE64,
-        CHALLENGE_2_BASE64, SESSION_ID, APP_ID_2);
+    when(mockDataStore.getSignSessionData(SESSION_ID))
+        .thenReturn(
+            new SignSessionData(ACCOUNT_NAME, APP_ID_2, SERVER_CHALLENGE_SIGN, USER_PUBLIC_KEY_2));
+    when(mockDataStore.getSecurityKeyData(ACCOUNT_NAME))
+        .thenReturn(ImmutableList.of(
+            new SecurityKeyData(0l, KEY_HANDLE_2, USER_PUBLIC_KEY_2, VENDOR_CERTIFICATE, 0)));
+    u2fServer =
+        new U2FServerReferenceImpl(mockChallengeGenerator, mockDataStore, cryto, TRUSTED_DOMAINS);
+    SignResponse signResponse =
+        new SignResponse(BROWSER_DATA_2_BASE64, SIGN_DATA_2_BASE64, SESSION_ID, KEY_HANDLE_BASE64);
 
     u2fServer.processSignResponse(signResponse);
   }

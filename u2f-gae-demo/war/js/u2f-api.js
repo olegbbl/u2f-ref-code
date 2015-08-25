@@ -49,26 +49,40 @@ u2f.ErrorCodes = {
 };
 
 /**
- * A message type for registration requests
+ * A message type for low-level MessagePort API registration requests
  * @typedef {{
  *   type: u2f.MessageTypes,
- *   signRequests: Array<u2f.SignRequest>,
- *   registerRequests: ?Array<u2f.RegisterRequest>,
+ *   appId: ?string,
  *   timeoutSeconds: ?number,
- *   requestId: ?number
+ *   requestId: ?number,
+ *   registerRequests: Array<u2f.RegisterRequest>,
+ *   registeredKeys: Array<u2f.RegisteredKey>
  * }}
  */
-u2f.Request;
+u2f.U2fRegisterRequest;
 
 /**
- * A message for registration responses
+ * A message type for low-level MessagePort API sign requests
+ * @typedef {{
+ *   type: u2f.MessageTypes,
+ *   appId: ?string,
+ *   challenge: string,
+ *   timeoutSeconds: ?number,
+ *   requestId: ?number,
+ *   registeredKeys: Array<u2f.RegisteredKey>
+ * }}
+ */
+u2f.U2fSignRequest;
+
+/**
+ * A message for low-level MessagePort API responses
  * @typedef {{
  *   type: u2f.MessageTypes,
  *   responseData: (u2f.Error | u2f.RegisterResponse | u2f.SignResponse),
  *   requestId: ?number
  * }}
  */
-u2f.Response;
+u2f.U2fResponse;
 
 /**
  * An error object for responses
@@ -78,17 +92,6 @@ u2f.Response;
  * }}
  */
 u2f.Error;
-
-/**
- * Data object for a single sign request.
- * @typedef {{
- *   version: string,
- *   challenge: string,
- *   keyHandle: string,
- *   appId: string
- * }}
- */
-u2f.SignRequest;
 
 /**
  * Data object for a sign response.
@@ -101,24 +104,42 @@ u2f.SignRequest;
 u2f.SignResponse;
 
 /**
+ * Data object for a registration response.
+ * @typedef {{
+ *   registrationData: string,
+ *   clientData: string,
+ *   appId: string
+ * }}
+ */
+u2f.RegisterResponse;
+
+/**
  * Data object for a registration request.
  * @typedef {{
  *   version: string,
- *   challenge: string,
- *   appId: string
+ *   challenge: string
  * }}
  */
 u2f.RegisterRequest;
 
 /**
- * Data object for a registration response.
+ * Data object for registered token.
  * @typedef {{
- *   registrationData: string,
- *   clientData: string
+ *   version: string,
+ *   keyHandle: string,
+ *   transports: ?u2f.Transports,
+ *   appId: ?string
  * }}
  */
-u2f.RegisterResponse;
+u2f.RegisteredKey;
 
+/**
+ * Transports
+ * @const
+ * @enum {string}
+ */
+u2f.Transports = {
+};
 
 // Low level MessagePort API support
 
@@ -200,37 +221,43 @@ u2f.WrappedChromeRuntimePort_ = function(port) {
 
 /**
  * Format a return a sign request.
- * @param {Array<u2f.SignRequest>} signRequests
- * @param {number} timeoutSeconds
+ * @param {string} appId
  * @param {number} reqId
- * @return {Object}
+ * @param {number} timeoutSeconds
+ * @param {string} challenge
+ * @param {Array<u2f.RegisteredKey>} registeredKeys
+ * @return {u2f.U2fSignRequest}
  */
 u2f.WrappedChromeRuntimePort_.prototype.formatSignRequest_ =
-    function(signRequests, timeoutSeconds, reqId) {
+    function(appId, reqId, timeoutSeconds, challenge, registeredKeys) {
   return {
       type: u2f.MessageTypes.U2F_SIGN_REQUEST,
-      signRequests: signRequests,
+      appId: appId,
+      requestId: reqId,
       timeoutSeconds: timeoutSeconds,
-      requestId: reqId
+      challenge: challenge,
+      registeredKeys: registeredKeys
     };
 };
 
 /**
- * Format a return a register request.
- * @param {Array<u2f.SignRequest>} signRequests
- * @param {Array<u2f.RegisterRequest>} signRequests
- * @param {number} timeoutSeconds
+ * Format and return a register request.
+ * @param {string} appId
  * @param {number} reqId
- * @return {Object}
+ * @param {number} timeoutSeconds
+ * @param {Array<u2f.RegisterRequest>} registerRequests
+ * @param {Array<u2f.RegisteredKey>} registeredKeys
+ * @return {u2f.U2fRegisterRequest}
  */
 u2f.WrappedChromeRuntimePort_.prototype.formatRegisterRequest_ =
-    function(signRequests, registerRequests, timeoutSeconds, reqId) {
+    function(appId, reqId, timeoutSeconds, registerRequests, registeredKeys) {
   return {
       type: u2f.MessageTypes.U2F_REGISTER_REQUEST,
-      signRequests: signRequests,
-      registerRequests: registerRequests,
+      appId: appId,
+      requestId: reqId,
       timeoutSeconds: timeoutSeconds,
-      requestId: reqId
+      registerRequests: registerRequests,
+      registeredKeys: registeredKeys
     };
 };
 
@@ -301,7 +328,7 @@ u2f.WrappedAuthenticatorPort_.prototype.addEventListener =
 
 /**
  * Callback invoked  when a response is received from the Authenticator.
- * @param function({data: Object}) callback
+ * @param {function({data: Object})} callback
  * @param {Object} message message Object
  */
 u2f.WrappedAuthenticatorPort_.prototype.onRequestUpdate_ =
@@ -326,7 +353,7 @@ u2f.WrappedAuthenticatorPort_.prototype.onRequestUpdate_ =
 /**
  * Fixup the response provided by the Authenticator to conform with
  * the U2F spec.
- * @param {Object} responseData
+ * @param {Object} responseObject
  * @return {Object} the U2F compliant response object
  */
 u2f.WrappedAuthenticatorPort_.prototype.doResponseFixups_ =
@@ -584,7 +611,6 @@ u2f.getPortSingleton_ = function(callback) {
         u2f.port_ = port;
         u2f.port_.addEventListener('message',
           /** @type {function(Event)} */ (u2f.responseHandler_));
-
         // Careful, here be async callbacks. Maybe.
         while (u2f.waitingForPort_.length)
           u2f.waitingForPort_.shift()(u2f.port_);
@@ -596,7 +622,7 @@ u2f.getPortSingleton_ = function(callback) {
 
 /**
  * Handles response messages from the extension.
- * @param {MessageEvent.<u2f.Response>} message
+ * @param {MessageEvent.<u2f.U2fResponse>} message
  * @private
  */
 u2f.responseHandler_ = function(message) {
@@ -613,38 +639,48 @@ u2f.responseHandler_ = function(message) {
 
 /**
  * Dispatches an array of sign requests to available U2F tokens.
- * @param {Array<u2f.SignRequest>} signRequests
+ * @param {string} appId
+ * @param {string} challenge
+ * @param {Array<u2f.RegisteredKey>} registeredKeys
  * @param {function((u2f.Error|u2f.SignResponse))} callback
  * @param {number=} opt_timeoutSeconds
  */
-u2f.sign = function(signRequests, callback, opt_timeoutSeconds) {
+u2f.sign = function(appId, challenge, registeredKeys, callback, 
+  opt_timeoutSeconds) {
   u2f.getPortSingleton_(function(port) {
     var reqId = ++u2f.reqCounter_;
     u2f.callbackMap_[reqId] = callback;
     var timeoutSeconds = (typeof opt_timeoutSeconds !== 'undefined' ?
         opt_timeoutSeconds : u2f.EXTENSION_TIMEOUT_SEC);
-    var req = port.formatSignRequest_(signRequests, timeoutSeconds, reqId);
+    var req = port.formatSignRequest_(appId, 
+                                      reqId, 
+                                      timeoutSeconds, 
+                                      registeredKeys);
     port.postMessage(req);
   });
 };
 
 /**
- * Dispatches register requests to available U2F tokens. An array of sign
- * requests identifies already registered tokens.
+ * Dispatches register requests to available U2F tokens. An array of 
+ * registeredKeys identifies already registered tokens.
+ * @param {string} appId
  * @param {Array<u2f.RegisterRequest>} registerRequests
- * @param {Array<u2f.SignRequest>} signRequests
+ * @param {Array<u2f.RegisteredKey>} registeredKeys
  * @param {function((u2f.Error|u2f.RegisterResponse))} callback
  * @param {number=} opt_timeoutSeconds
  */
-u2f.register = function(registerRequests, signRequests,
-    callback, opt_timeoutSeconds) {
+u2f.register = function(appId, registerRequests, registeredKeys, 
+  callback, opt_timeoutSeconds) {
   u2f.getPortSingleton_(function(port) {
     var reqId = ++u2f.reqCounter_;
     u2f.callbackMap_[reqId] = callback;
     var timeoutSeconds = (typeof opt_timeoutSeconds !== 'undefined' ?
         opt_timeoutSeconds : u2f.EXTENSION_TIMEOUT_SEC);
-    var req = port.formatRegisterRequest_(
-        signRequests, registerRequests, timeoutSeconds, reqId);
+    var req = port.formatRegisterRequest_(appId, 
+                                          reqId, 
+                                          timeoutSeconds,
+                                          registerRequests, 
+                                          registeredKeys);
     port.postMessage(req);
   });
 };

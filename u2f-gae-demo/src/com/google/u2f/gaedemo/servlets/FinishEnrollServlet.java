@@ -38,6 +38,7 @@ public class FinishEnrollServlet extends HttpServlet {
     this.dataStore = dataStore;
   }
 
+  @Override
   public void doPost(HttpServletRequest req, HttpServletResponse resp) 
       throws IOException, ServletException {
 

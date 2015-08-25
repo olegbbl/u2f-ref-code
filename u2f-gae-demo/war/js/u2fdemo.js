@@ -127,8 +127,9 @@ function sendBeginEnrollRequest() {
       console.log(beginEnrollResponse);
       showMessage("please touch the token");
       u2f.register(
-        [beginEnrollResponse.enroll_data],
-        beginEnrollResponse.sign_data,
+        beginEnrollResponse.appId,
+        beginEnrollResponse.registerRequests,
+        beginEnrollResponse.registeredKeys,
         function (response) {
           if (response.errorCode) {
             onError(response.errorCode, true);
@@ -145,17 +146,14 @@ function sendBeginSignRequest() {
    .done(function(signData) {
       console.log(signData);
       showMessage("please touch the token");
-      // Store sessionIds
-      var sessionIds = {};
-      for (var i = 0; i < signData.length; i++) {
-        sessionIds[signData[i].keyHandle] = signData[i].sessionId;
-        delete signData[i]['sessionId'];
-      }
-      u2f.sign(signData, function (response) {
+      u2f.sign(signData.appId,
+        signData.challenge,
+        signData.registeredKeys,
+        function (response) {
           if (response.errorCode) {
             onError(response.errorCode, false);
           } else {
-            response['sessionId'] = sessionIds[response.keyHandle];
+            response['sessionId'] = signData.sessionId;
             onTokenSignSuccess(response);
           }
       })
@@ -233,7 +231,7 @@ if (navigator.userAgent.indexOf("iPhone") > -1) {
           opt_timeoutSeconds : u2f.EXTENSION_TIMEOUT_SEC),
       requestId: reqId
     };
-    executeRequest(req);    
+    executeRequest(req);
   };
 
   u2f.register = function(registerRequests, signRequests,

@@ -6,20 +6,7 @@
 
 package com.google.u2f.server.impl;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.security.cert.CertificateEncodingException;
-import java.security.cert.X509Certificate;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-import java.util.logging.Logger;
-
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.codec.binary.Hex;
-
 import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -37,10 +24,24 @@ import com.google.u2f.server.U2FServer;
 import com.google.u2f.server.data.EnrollSessionData;
 import com.google.u2f.server.data.SecurityKeyData;
 import com.google.u2f.server.data.SignSessionData;
+import com.google.u2f.server.messages.RegisteredKey;
 import com.google.u2f.server.messages.RegistrationRequest;
 import com.google.u2f.server.messages.RegistrationResponse;
 import com.google.u2f.server.messages.SignRequest;
 import com.google.u2f.server.messages.SignResponse;
+
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.codec.binary.Hex;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.logging.Logger;
 
 public class U2FServerReferenceImpl implements U2FServer {
   
@@ -77,16 +78,18 @@ public class U2FServerReferenceImpl implements U2FServer {
     EnrollSessionData sessionData = new EnrollSessionData(accountName, appId, challenge);
 
     String sessionId = dataStore.storeSessionData(sessionData);
-
     String challengeBase64 = Base64.encodeBase64URLSafeString(challenge);
+    List<RegisteredKey> registeredKeys = getRegisteredKeys(accountName, appId);
 
     Log.info("-- Output --");
     Log.info("  sessionId: " + sessionId);
     Log.info("  challenge: " + Hex.encodeHexString(challenge));
+    Log.info("  registeredKeys: " + registeredKeys);
 
     Log.info("<< getRegistrationRequest " + accountName);
 
-    return new RegistrationRequest(U2FConsts.U2F_V2, challengeBase64, appId, sessionId);
+    return new RegistrationRequest(
+        U2FConsts.U2F_V2, challengeBase64, appId, sessionId, registeredKeys);
   }
 
   @Override
@@ -162,34 +165,23 @@ public class U2FServerReferenceImpl implements U2FServer {
   }
 
   @Override
-  public List<SignRequest> getSignRequest(String accountName, String appId) throws U2FException {
+  public SignRequest getSignRequest(String accountName, String appId) throws U2FException {
     Log.info(">> getSignRequest " + accountName);
 
-    List<SecurityKeyData> securityKeyDataList = dataStore.getSecurityKeyData(accountName);
+    byte[] challenge = challengeGenerator.generateChallenge(accountName);
+    String challengeBase64 = Base64.encodeBase64URLSafeString(challenge);
+    List<RegisteredKey> registeredKeys = getRegisteredKeys(accountName, appId);
+    SignSessionData sessionData =
+        new SignSessionData(accountName, appId, challenge, null/* public key not used*/);
+    String sessionId = dataStore.storeSessionData(sessionData);
 
-    ImmutableList.Builder<SignRequest> result = ImmutableList.builder();
-    
-    for (SecurityKeyData securityKeyData : securityKeyDataList) {
-      byte[] challenge = challengeGenerator.generateChallenge(accountName);
+    Log.info("-- Output --");
+    Log.info("  sessionId: " + sessionId);
+    Log.info("  challenge: " + Hex.encodeHexString(challenge));
+    Log.info("  registeredKeys: " + registeredKeys);
+    Log.info("<< getSignRequest " + accountName);
 
-      SignSessionData sessionData = new SignSessionData(accountName, appId, 
-          challenge, securityKeyData.getPublicKey());
-      String sessionId = dataStore.storeSessionData(sessionData);
-
-      byte[] keyHandle = securityKeyData.getKeyHandle();
-
-      Log.info("-- Output --");
-      Log.info("  sessionId: " + sessionId);
-      Log.info("  challenge: " + Hex.encodeHexString(challenge));
-      Log.info("  keyHandle: " + Hex.encodeHexString(keyHandle));
-
-      String challengeBase64 = Base64.encodeBase64URLSafeString(challenge);
-      String keyHandleBase64 = Base64.encodeBase64URLSafeString(keyHandle);
-
-      Log.info("<< getSignRequest " + accountName);
-      result.add(new SignRequest(U2FConsts.U2F_V2, challengeBase64, appId, keyHandleBase64, sessionId));
-    }
-    return result.build();
+    return new SignRequest(U2FConsts.U2F_V2, challengeBase64, appId, sessionId, registeredKeys);
   }
 
   @Override
@@ -197,21 +189,21 @@ public class U2FServerReferenceImpl implements U2FServer {
     Log.info(">> processSignResponse");
 
     String sessionId = signResponse.getSessionId();
-    String browserDataBase64 = signResponse.getBd();
-    String rawSignDataBase64 = signResponse.getSign();
+    String browserDataBase64 = signResponse.getClientData();
+    String rawSignDataBase64 = signResponse.getSignatureData();
 
     SignSessionData sessionData = dataStore.getSignSessionData(sessionId);
 
     if (sessionData == null) {
       throw new U2FException("Unknown session_id");
     }
-    
+    byte[] keyHandle =  Base64.decodeBase64(signResponse.getKeyHandle());
     String appId = sessionData.getAppId();
     SecurityKeyData securityKeyData = null;
     
-    for (SecurityKeyData temp : dataStore.getSecurityKeyData(sessionData.getAccountName())) {
-      if (Arrays.equals(sessionData.getPublicKey(), temp.getPublicKey())) {
-        securityKeyData = temp;
+    for (SecurityKeyData securityKey : dataStore.getSecurityKeyData(sessionData.getAccountName())) {
+      if (Arrays.equals(keyHandle, securityKey.getKeyHandle())) {
+        securityKeyData = securityKey;
         break;
       }
     }
@@ -227,6 +219,7 @@ public class U2FServerReferenceImpl implements U2FServer {
     Log.info("  sessionId: " + sessionId);
     Log.info("  publicKey: " + Hex.encodeHexString(securityKeyData.getPublicKey()));
     Log.info("  challenge: " + Hex.encodeHexString(sessionData.getChallenge()));
+    Log.info("  keyHandle: " + Hex.encodeHexString(keyHandle));
     Log.info("  accountName: " + sessionData.getAccountName());
     Log.info("  browserData: " + browserData);
     Log.info("  rawSignData: " + Hex.encodeHexString(rawSignData));
@@ -342,4 +335,16 @@ public class U2FServerReferenceImpl implements U2FServer {
     }
     return uri.getScheme() + "://" + uri.getAuthority();
   }
+  
+  private List<RegisteredKey> getRegisteredKeys(String accountName, String appId) {
+    List<SecurityKeyData> securityKeys = dataStore.getSecurityKeyData(accountName);
+    List<RegisteredKey> registeredKeys = new ArrayList<RegisteredKey>(securityKeys.size());
+    for (SecurityKeyData securityKey : securityKeys) {
+      // TODO add transports
+      registeredKeys.add(new RegisteredKey(U2FConsts.U2F_V2,
+          Base64.encodeBase64URLSafeString(securityKey.getKeyHandle()), appId, null));
+    }
+    return registeredKeys;
+  }
+
 }

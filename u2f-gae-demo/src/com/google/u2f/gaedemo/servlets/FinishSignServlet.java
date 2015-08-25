@@ -6,13 +6,6 @@
 
 package com.google.u2f.gaedemo.servlets;
 
-import java.io.IOException;
-
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import com.google.appengine.api.users.UserService;
 import com.google.appengine.api.users.UserServiceFactory;
 import com.google.inject.Inject;
@@ -25,7 +18,12 @@ import com.google.u2f.server.data.SecurityKeyData;
 import com.google.u2f.server.data.SignSessionData;
 import com.google.u2f.server.messages.SignResponse;
 
-import org.apache.commons.codec.binary.Base64;
+import java.io.IOException;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 @SuppressWarnings("serial")
 @Singleton
@@ -41,6 +39,7 @@ public class FinishSignServlet extends HttpServlet {
     this.dataStore = dataStore;
   }
 
+  @Override
   public void doPost(HttpServletRequest req, HttpServletResponse resp) 
       throws IOException, ServletException {
 
@@ -56,14 +55,12 @@ public class FinishSignServlet extends HttpServlet {
     if (!currentUser.equals(expectedUser)) {
       throw new ServletException("Cross-site request prohibited");
     }   
-    
-    
+
     SignResponse signResponse = new SignResponse(
         req.getParameter("clientData"),
         req.getParameter("signatureData"),
-        Base64.encodeBase64URLSafeString(sessionData.getChallenge()),
         req.getParameter("sessionId"),
-        sessionData.getAppId());
+        req.getParameter("keyHandle"));
     
     SecurityKeyData securityKeyData;
     try {

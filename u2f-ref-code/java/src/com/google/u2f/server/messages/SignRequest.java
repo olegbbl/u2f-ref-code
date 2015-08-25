@@ -6,7 +6,11 @@
 
 package com.google.u2f.server.messages;
 
-public class SignRequest {
+import com.google.common.collect.ImmutableList;
+
+import java.util.Objects;
+
+public final class SignRequest {
   /**
    * Version of the protocol that the to-be-registered U2F token must speak. For
    * the version of the protocol described herein, must be "U2F_V2"
@@ -23,12 +27,8 @@ public class SignRequest {
    * application identified by the application id.
    */
   private final String appId;
-
-  /**
-   * websafe-base64 encoding of the key handle obtained from the U2F token
-   * during registration.
-   */
-  private final String keyHandle;
+  
+  private final ImmutableList<RegisteredKey> registeredKeys;
 
   /**
    * A session id created by the RP. The RP can opaquely store things like
@@ -39,13 +39,12 @@ public class SignRequest {
    */
   private final String sessionId;
 
-  public SignRequest(String version, String challenge, String appId, String keyHandle,
-      String sessionId) {
-    super();
+  public SignRequest(String version, String challenge, String appId, String sessionId,
+      Iterable<RegisteredKey> registeredKeys) {
     this.version = version;
     this.challenge = challenge;
     this.appId = appId;
-    this.keyHandle = keyHandle;
+    this.registeredKeys = ImmutableList.copyOf(registeredKeys);
     this.sessionId = sessionId;
   }
 
@@ -61,24 +60,17 @@ public class SignRequest {
     return appId;
   }
 
-  public String getKeyHandle() {
-    return keyHandle;
-  }
-
   public String getSessionId() {
     return sessionId;
+  }
+  
+  public ImmutableList<RegisteredKey> getRegisteredKeys() {
+    return registeredKeys;
   }
 
   @Override
   public int hashCode() {
-    final int prime = 31;
-    int result = 1;
-    result = prime * result + ((appId == null) ? 0 : appId.hashCode());
-    result = prime * result + ((challenge == null) ? 0 : challenge.hashCode());
-    result = prime * result + ((keyHandle == null) ? 0 : keyHandle.hashCode());
-    result = prime * result + ((sessionId == null) ? 0 : sessionId.hashCode());
-    result = prime * result + ((version == null) ? 0 : version.hashCode());
-    return result;
+    return Objects.hash(appId, challenge, version, sessionId, registeredKeys);
   }
 
   @Override
@@ -90,31 +82,25 @@ public class SignRequest {
     if (getClass() != obj.getClass())
       return false;
     SignRequest other = (SignRequest) obj;
-    if (appId == null) {
-      if (other.appId != null)
-        return false;
-    } else if (!appId.equals(other.appId))
-      return false;
-    if (challenge == null) {
-      if (other.challenge != null)
-        return false;
-    } else if (!challenge.equals(other.challenge))
-      return false;
-    if (keyHandle == null) {
-      if (other.keyHandle != null)
-        return false;
-    } else if (!keyHandle.equals(other.keyHandle))
-      return false;
-    if (sessionId == null) {
-      if (other.sessionId != null)
-        return false;
-    } else if (!sessionId.equals(other.sessionId))
-      return false;
-    if (version == null) {
-      if (other.version != null)
-        return false;
-    } else if (!version.equals(other.version))
-      return false;
-    return true;
+    return Objects.equals(appId, other.appId) && Objects.equals(challenge, other.challenge)
+        && Objects.equals(sessionId, other.sessionId)
+        && Objects.equals(registeredKeys, other.registeredKeys);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder builder = new StringBuilder();
+    builder.append("SignRequest [version=")
+        .append(version)
+        .append(", challenge=")
+        .append(challenge)
+        .append(", appId=")
+        .append(appId)
+        .append(", registeredKeys=")
+        .append(registeredKeys)
+        .append(", sessionId=")
+        .append(sessionId)
+        .append("]");
+    return builder.toString();
   }
 }

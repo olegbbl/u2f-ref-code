@@ -28,9 +28,8 @@ public class SignFinishServlet extends HtmlServlet {
     SignResponse signResponse = new SignResponse(
         req.getParameter("browserData"),
         req.getParameter("signData"),
-        req.getParameter("challenge"),
         req.getParameter("sessionId"),
-        req.getParameter("appId"));
+        req.getParameter("keyHandle"));
     try {
       u2fServer.processSignResponse(signResponse);
       body.println("Success!!!");

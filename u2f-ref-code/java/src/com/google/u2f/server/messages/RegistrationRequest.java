@@ -6,6 +6,10 @@
 
 package com.google.u2f.server.messages;
 
+import com.google.common.collect.ImmutableList;
+
+import java.util.Objects;
+
 public class RegistrationRequest {
   /**
    * Version of the protocol that the to-be-registered U2F token must speak. For
@@ -17,14 +21,6 @@ public class RegistrationRequest {
   private final String challenge;
 
   /**
-   * The application id that the RP would like to assert. The U2F token will
-   * enforce that the key handle provided above is associated with this
-   * application id. The browser enforces that the calling origin belongs to the
-   * application identified by the application id.
-   */
-  private final String appId;
-
-  /**
    * A session id created by the RP. The RP can opaquely store things like
    * expiration times for the sign-in session, protocol version used, public key
    * expected to sign the identity assertion, etc. The response from the API
@@ -32,12 +28,24 @@ public class RegistrationRequest {
    * requests, and associate the responses with the correct request
    */
   private final String sessionId;
+  
+  /**
+   * The application id that the RP would like to assert. The U2F token will
+   * enforce that the key handle provided above is associated with this
+   * application id. The browser enforces that the calling origin belongs to the
+   * application identified by the application id.
+   */
+  private final String appId;
+  
+  private final ImmutableList<RegisteredKey> registeredKeys;
 
-  public RegistrationRequest(String version, String challenge, String appId, String sessionId) {
+  public RegistrationRequest(String version, String challenge, String appId, String sessionId,
+      Iterable<RegisteredKey> registeredKeys) {
     this.version = version;
     this.challenge = challenge;
     this.appId = appId;
     this.sessionId = sessionId;
+    this.registeredKeys = ImmutableList.copyOf(registeredKeys);
   }
 
   public String getVersion() {
@@ -48,23 +56,21 @@ public class RegistrationRequest {
     return challenge;
   }
 
+  public String getSessionId() {
+    return sessionId;
+  }
+  
   public String getAppId() {
     return appId;
   }
 
-  public String getSessionId() {
-    return sessionId;
+  public ImmutableList<RegisteredKey> getRegisteredKeys() {
+    return registeredKeys;
   }
 
   @Override
   public int hashCode() {
-    final int prime = 31;
-    int result = 1;
-    result = prime * result + ((appId == null) ? 0 : appId.hashCode());
-    result = prime * result + ((challenge == null) ? 0 : challenge.hashCode());
-    result = prime * result + ((sessionId == null) ? 0 : sessionId.hashCode());
-    result = prime * result + ((version == null) ? 0 : version.hashCode());
-    return result;
+    return Objects.hash(challenge, version, sessionId, appId, registeredKeys);
   }
 
   @Override
@@ -76,26 +82,26 @@ public class RegistrationRequest {
     if (getClass() != obj.getClass())
       return false;
     RegistrationRequest other = (RegistrationRequest) obj;
-    if (appId == null) {
-      if (other.appId != null)
-        return false;
-    } else if (!appId.equals(other.appId))
-      return false;
-    if (challenge == null) {
-      if (other.challenge != null)
-        return false;
-    } else if (!challenge.equals(other.challenge))
-      return false;
-    if (sessionId == null) {
-      if (other.sessionId != null)
-        return false;
-    } else if (!sessionId.equals(other.sessionId))
-      return false;
-    if (version == null) {
-      if (other.version != null)
-        return false;
-    } else if (!version.equals(other.version))
-      return false;
-    return true;
+    return Objects.equals(challenge, other.challenge) && Objects.equals(version, other.version)
+        && Objects.equals(appId, other.appId)
+        && Objects.equals(sessionId, other.sessionId)
+        && Objects.equals(registeredKeys, other.registeredKeys);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder builder = new StringBuilder();
+    builder.append("RegistrationRequest [version=")
+        .append(version)
+        .append(", challenge=")
+        .append(challenge)
+        .append(", sessionId=")
+        .append(sessionId)
+        .append(", appId=")
+        .append(appId)
+        .append(", registeredKeys=")
+        .append(registeredKeys)
+        .append("]");
+    return builder.toString();
   }
 }
